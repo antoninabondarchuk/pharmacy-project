@@ -1,0 +1,29 @@
+output-format: pylint
+
+strictness: medium
+test-warnings: true
+doc-warnings: false
+
+ignore-patterns:
+  - "(^|/)migrations?(/|$)"
+  - "(^|/)migrations?(/|$)"
+  - "(^|/)docs?(/|$)"
+  - "prospector.yml"
+
+ignore-paths:
+  - migrations
+  - static
+  - docs
+pyroma:
+  run: false
+uses:
+    - django
+autodetect: true
+pep8:
+  full: true
+  disable:
+      - W602
+      - W603
+  options:
+
+    max-line-length: 120

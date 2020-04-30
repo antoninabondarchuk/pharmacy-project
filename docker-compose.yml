@@ -1,0 +1,100 @@
+version: "3.3"
+
+volumes:
+  postgres_data_vol:
+    external: false
+  elasticsearch_data_vol:
+    external: false
+
+services:
+
+  postgres:
+    image: postgres:latest
+    ports:
+      - 5432:5432
+    expose:
+      - 5432
+    environment:
+      POSTGRES_DB: core
+    volumes:
+      - postgres_data_vol:/var/lib/postgresql/data/
+
+  redis:
+    image: redis:alpine
+
+  celery:
+    image: core
+    command: celery -A pharmacy worker -l info --beat
+    restart: always
+    environment:
+      - DJANGO_SETTINGS_MODULE=pharmacy.settings
+      - CELERY_BROKER_URL=redis://redis:6379
+      - CELERY_RESULT_BACKEND=redis://redis:6379
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    volumes:
+      - type: bind
+        source: ./
+        target: /code/
+
+  web:
+    build: .
+    image: core
+    restart: always
+    entrypoint: /code/entrypoint.sh
+
+    ports:
+      - 8000:8000
+    env_file:
+      - .env
+
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+
+    volumes:
+      - type: bind
+        source: ./
+        target: /code/
+
+  elasticsearch:
+    # to increase the value of vm sysctl -w vm.max_map_count=262144
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.5.1
+    ports:
+      - 9200:9200
+    volumes:
+      - elasticsearch_data_vol:/usr/share/elasticsearch/data
+    environment:
+      - http.host=0.0.0.0
+      - transport.host=localhost
+      - network.host=0.0.0.0
+      # Disable X-Pack security: https://www.elastic.co/guide/en/elasticsearch/reference/5.5/security-settings.html#general-security-settings
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    stdin_open: true
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.5.1
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.5.1
+    ports:
+      - 5044:5044
+    links:
+      - elasticsearch
+    volumes:
+      - ./:/config-dir
+    command: logstash -f /config-dir/logstash.conf
+    depends_on:
+      - elasticsearch
